@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:math';
+import 'package:http/http.dart' as http;
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -24,13 +26,7 @@ class ImageService {
   final Set<String> _usedImages = <String>{};
   final Set<String> _usedAvatars = <String>{};
 
-  static const int _recipeWidth = 400;
-  static const int _recipeHeight = 600;
   static const int _avatarSize = 256;
-
-  String _recipePlaceholderUrl(int n) =>
-      'https://placehold.co/${_recipeWidth}x$_recipeHeight/png?text=Recipe+$n';
-
   String _avatarUrlFromDicebear(int seed) =>
       'https://api.dicebear.com/7.x/adventurer/png?seed=$seed&size=$_avatarSize';
 
@@ -67,10 +63,8 @@ class ImageService {
     if (availableAvatarsJson != null) {
       _availableAvatars.addAll(List<String>.from(jsonDecode(availableAvatarsJson)));
     }
-    bool hadBad =
-        _availableImages.any((u) => u.contains('picsum.photos') || u.contains('loremflickr.com')) ||
-            _usedImages.any((u) => u.contains('picsum.photos') || u.contains('loremflickr.com'));
-    if (hadBad) {
+    bool hadLegacy = _availableImages.any(_isLegacyUrl) || _usedImages.any(_isLegacyUrl);
+    if (hadLegacy) {
       _availableImages.clear();
       _usedImages.clear();
       await _saveState();
@@ -120,6 +114,11 @@ class ImageService {
     return avatarUrl;
   }
 
+  bool _isLegacyUrl(String u) =>
+      u.contains('placehold.co') ||
+          u.contains('picsum.photos') ||
+          u.contains('loremflickr.com');
+
   Future<void> _saveState() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyUsedImages, jsonEncode(_usedImages.toList()));
@@ -140,19 +139,78 @@ class ImageService {
 
   Future<void> _generateImagePool() async {
     _availableImages.clear();
-    for (int i = 1; i <= _imagePoolSize; i++) {
-      _availableImages.add(_recipePlaceholderUrl(i));
+    final fromMealDb = await _fetchMealDbImages(_imagePoolSize);
+    if (fromMealDb.length < _imagePoolSize) {
+      final need = _imagePoolSize - fromMealDb.length;
+      final fromFoodish = await _fetchFoodishImages(need);
+      _availableImages
+        ..addAll(fromMealDb)
+        ..addAll(fromFoodish);
+    } else {
+      _availableImages.addAll(fromMealDb);
     }
+    _availableImages.removeWhere((u) => _usedImages.contains(u));
+    final seen = <String>{};
+    _availableImages.retainWhere((u) => seen.add(u));
     await _saveState();
   }
 
   Future<void> _generateAvatarPool() async {
     _availableAvatars.clear();
     final now = DateTime.now().millisecondsSinceEpoch;
+    final rnd = Random(now);
     for (int i = 0; i < _avatarPoolSize; i++) {
-      final seed = now + i * 73;
+      final seed = now + i * 73 + rnd.nextInt(1000000);
       _availableAvatars.add(_avatarUrlFromDicebear(seed));
     }
+    _availableAvatars.removeWhere((u) => _usedAvatars.contains(u));
     await _saveState();
+  }
+
+  Future<List<String>> _fetchMealDbImages(int needed) async {
+    final result = <String>[];
+    final letters = 'abcdefghijklmnopqrstuvwxyz'.split('');
+    for (final ch in letters) {
+      if (result.length >= needed) break;
+      final uri = Uri.parse('https://www.themealdb.com/api/json/v1/1/search.php?f=$ch');
+      try {
+        final resp = await http.get(uri);
+        if (resp.statusCode == 200) {
+          final data = jsonDecode(resp.body) as Map<String, dynamic>;
+          final meals = (data['meals'] as List?) ?? [];
+          for (final m in meals) {
+            if (result.length >= needed) break;
+            final thumb = (m['strMealThumb'] as String?)?.trim();
+            if (thumb != null && thumb.isNotEmpty) {
+              result.add(thumb);
+            }
+          }
+        }
+      } catch (e) {
+        print('MealDB fetch error for "$ch": $e');
+      }
+    }
+    return result;
+  }
+
+  Future<List<String>> _fetchFoodishImages(int needed) async {
+    final result = <String>[];
+    for (int i = 0; i < needed; i++) {
+      try {
+        final resp = await http.get(Uri.parse('https://foodish-api.com/api/'));
+        if (resp.statusCode == 200) {
+          final data = jsonDecode(resp.body) as Map<String, dynamic>;
+          final url = (data['image'] as String?)?.trim();
+          if (url != null && url.isNotEmpty) {
+            result.add(url);
+          }
+        }
+      } catch (e) {
+        print('Foodish fetch error: $e');
+      }
+    }
+    final seen = <String>{};
+    result.retainWhere((u) => seen.add(u));
+    return result;
   }
 }
