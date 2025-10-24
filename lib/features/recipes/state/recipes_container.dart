@@ -3,8 +3,6 @@ import 'package:prac5/features/recipes/models/recipe.dart';
 import 'package:prac5/features/recipes/screens/home_screen.dart';
 import 'package:prac5/services/image_service.dart';
 
-/// Корневой контейнер состояния списка рецептов.
-/// Держит список и пробрасывает колбэки на экран HomeScreen.
 class RecipesContainer extends StatefulWidget {
   const RecipesContainer({super.key});
 
@@ -19,7 +17,6 @@ class _RecipesContainerState extends State<RecipesContainer> {
   @override
   void initState() {
     super.initState();
-    _imageService.initialize(); // восстановим пулы офлайн
   }
 
   // Добавление рецепта с присвоением локального URL картинки

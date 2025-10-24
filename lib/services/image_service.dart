@@ -2,11 +2,7 @@ import 'dart:convert';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Надёжный сервис предзагрузки/кэширования изображений.
-/// - Обложки рецептов: placehold.co (всегда 200, без ограничений).
-/// - Аватары: Dicebear (стабильно, без авторизации).
 class ImageService {
-  // Singleton
   static final ImageService _instance = ImageService._internal();
   factory ImageService() => _instance;
   ImageService._internal();
@@ -28,24 +24,16 @@ class ImageService {
   final Set<String> _usedImages = <String>{};
   final Set<String> _usedAvatars = <String>{};
 
-  // Параметры
   static const int _recipeWidth = 400;
   static const int _recipeHeight = 600;
   static const int _avatarSize = 256;
 
-  // ---------- URL-генераторы ----------
-
-  // placehold.co — отдаёт PNG/JPG без ограничений и 403/500
   String _recipePlaceholderUrl(int n) =>
       'https://placehold.co/${_recipeWidth}x$_recipeHeight/png?text=Recipe+$n';
 
-  // Dicebear — детерминированные аватарки по seed
   String _avatarUrlFromDicebear(int seed) =>
       'https://api.dicebear.com/7.x/adventurer/png?seed=$seed&size=$_avatarSize';
 
-  // ---------- Публичные методы ----------
-
-  /// Полный сброс пулов (если надо «обнулить» и сгенерировать заново).
   Future<void> resetPools() async {
     _availableImages.clear();
     _availableAvatars.clear();
@@ -62,14 +50,11 @@ class ImageService {
 
   Future<void> initialize() async {
     if (_isInitialized) return;
-
     final prefs = await SharedPreferences.getInstance();
-
     final usedImagesJson = prefs.getString(_keyUsedImages);
     final availableImagesJson = prefs.getString(_keyAvailableImages);
     final usedAvatarsJson = prefs.getString(_keyUsedAvatars);
     final availableAvatarsJson = prefs.getString(_keyAvailableAvatars);
-
     if (usedImagesJson != null) {
       _usedImages.addAll(Set<String>.from(jsonDecode(usedImagesJson)));
     }
@@ -82,8 +67,6 @@ class ImageService {
     if (availableAvatarsJson != null) {
       _availableAvatars.addAll(List<String>.from(jsonDecode(availableAvatarsJson)));
     }
-
-    // Миграция: выбросить старые нестабильные ссылки (picsum/loremflickr)
     bool hadBad =
         _availableImages.any((u) => u.contains('picsum.photos') || u.contains('loremflickr.com')) ||
             _usedImages.any((u) => u.contains('picsum.photos') || u.contains('loremflickr.com'));
@@ -92,18 +75,15 @@ class ImageService {
       _usedImages.clear();
       await _saveState();
     }
-
     if (_availableImages.isEmpty) {
       await _generateImagePool();
     }
     if (_availableAvatars.isEmpty) {
       await _generateAvatarPool();
     }
-
     _isInitialized = true;
   }
 
-  /// Мягкая предзагрузка (ошибки не критичны).
   Future<void> preloadImagePool() async {
     await initialize();
     await _preloadImages(_availableImages);
@@ -112,7 +92,6 @@ class ImageService {
 
   Future<String?> getNextRecipeImage() async {
     await initialize();
-
     if (_availableImages.isEmpty) {
       await _generateImagePool();
       await _preloadImages(_availableImages).catchError(
@@ -120,7 +99,6 @@ class ImageService {
       );
     }
     if (_availableImages.isEmpty) return null;
-
     final imageUrl = _availableImages.removeAt(0);
     _usedImages.add(imageUrl);
     await _saveState();
@@ -129,7 +107,6 @@ class ImageService {
 
   Future<String?> getNextAvatar() async {
     await initialize();
-
     if (_availableAvatars.isEmpty) {
       await _generateAvatarPool();
       await _preloadImages(_availableAvatars).catchError(
@@ -137,14 +114,11 @@ class ImageService {
       );
     }
     if (_availableAvatars.isEmpty) return null;
-
     final avatarUrl = _availableAvatars.removeAt(0);
     _usedAvatars.add(avatarUrl);
     await _saveState();
     return avatarUrl;
   }
-
-  // ---------- Внутренняя кухня ----------
 
   Future<void> _saveState() async {
     final prefs = await SharedPreferences.getInstance();
@@ -159,7 +133,6 @@ class ImageService {
       try {
         await _cacheManager.downloadFile(url);
       } catch (e) {
-        // Не валим поток, просто лог.
         print('Ошибка предзагрузки $url: $e');
       }
     }
@@ -167,7 +140,6 @@ class ImageService {
 
   Future<void> _generateImagePool() async {
     _availableImages.clear();
-    // Детеминированный набор плейсхолдеров "Recipe #"
     for (int i = 1; i <= _imagePoolSize; i++) {
       _availableImages.add(_recipePlaceholderUrl(i));
     }
@@ -176,7 +148,6 @@ class ImageService {
 
   Future<void> _generateAvatarPool() async {
     _availableAvatars.clear();
-
     final now = DateTime.now().millisecondsSinceEpoch;
     for (int i = 0; i < _avatarPoolSize; i++) {
       final seed = now + i * 73;

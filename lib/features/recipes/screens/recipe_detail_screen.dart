@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:prac5/features/recipes/models/recipe.dart';
 import 'package:prac5/features/recipes/screens/recipe_form_screen.dart';
 
@@ -79,34 +80,7 @@ class RecipeDetailScreen extends StatelessWidget {
       ),
       body: SingleChildScrollView(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [ recipe.isCooked ? Colors.green : Colors.deepOrange,
-                          recipe.isCooked ? Colors.green.shade300 : Colors.deepOrange.shade300 ],
-                begin: Alignment.topLeft, end: Alignment.bottomRight,
-              ),
-            ),
-            child: Column(children: [
-              Icon(recipe.isCooked ? Icons.check_circle : Icons.schedule, size: 64, color: Colors.white),
-              const SizedBox(height: 16),
-              Text(recipe.title, textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
-              const SizedBox(height: 8),
-              Text(recipe.author, textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 18, color: Colors.white, fontStyle: FontStyle.italic)),
-              if (recipe.rating != null) ...[
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(5, (i) =>
-                    Icon(i < recipe.rating! ? Icons.star : Icons.star_border, color: Colors.white, size: 24)),
-                ),
-              ],
-            ]),
-          ),
+          _header(),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -142,6 +116,89 @@ class RecipeDetailScreen extends StatelessWidget {
           ),
         ]),
       ),
+    );
+  }
+
+  Widget _header() {
+    final hasImage = recipe.imageUrl != null && recipe.imageUrl!.isNotEmpty;
+    final bgTop = recipe.isCooked ? Colors.green : Colors.deepOrange;
+    final bgBottom = recipe.isCooked ? Colors.green.shade300 : Colors.deepOrange.shade300;
+
+    if (!hasImage) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: [bgTop, bgBottom], begin: Alignment.topLeft, end: Alignment.bottomRight),
+        ),
+        child: _headerContent(color: Colors.white),
+      );
+    }
+
+    return Stack(
+      children: [
+        AspectRatio(
+          aspectRatio: 16 / 9,
+          child: CachedNetworkImage(
+            imageUrl: recipe.imageUrl!,
+            fit: BoxFit.cover,
+            placeholder: (_, __) => Container(color: Colors.black12),
+            errorWidget: (_, __, ___) => Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: [bgTop, bgBottom], begin: Alignment.topLeft, end: Alignment.bottomRight),
+              ),
+            ),
+          ),
+        ),
+        Positioned.fill(
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.transparent, Colors.black38],
+              ),
+            ),
+          ),
+        ),
+        Positioned.fill(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: _headerContent(color: Colors.white),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _headerContent({required Color color}) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(recipe.isCooked ? Icons.check_circle : Icons.schedule, size: 64, color: color),
+        const SizedBox(height: 16),
+        Text(
+          recipe.title,
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          recipe.author,
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 18, color: color.withOpacity(0.95), fontStyle: FontStyle.italic),
+        ),
+        if (recipe.rating != null) ...[
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(
+              5,
+                  (i) => Icon(i < recipe.rating! ? Icons.star : Icons.star_border, color: color, size: 24),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
